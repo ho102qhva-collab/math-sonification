@@ -12,6 +12,79 @@ export class MathEngine {
     this._compiled = null;
     this._expression = '';
     this._scope = {};
+    this._compiledList = [];
+  }
+
+  // 编译单个表达式
+  compile(expr) {
+    this._compiledList = [];
+    this._compiled = null;
+    try {
+      this._expression = expr;
+      this._compiled = math.compile(expr);
+      const testPoints = [0, 1, -1, 0.5, 2];
+      let anyValid = false;
+      for (const x of testPoints) {
+        const result = this.evaluate(x);
+        if (result.defined) { anyValid = true; break; }
+      }
+      if (!anyValid) {
+        this._compiled = null;
+        return { success: false, error: `无法计算表达式 "${expr}"，请检查函数名和变量是否正确` };
+      }
+      return { success: true };
+    } catch (e) {
+      this._compiled = null;
+      return { success: false, error: e.message };
+    }
+  }
+
+  // 编译多个表达式（分号分隔）
+  compileMulti(exprStr) {
+    const parts = exprStr.split(';').map(s => s.trim()).filter(Boolean);
+    if (parts.length === 0) return { success: false, error: '请输入至少一个函数表达式' };
+    if (parts.length === 1) return this.compile(parts[0]);
+
+    this._compiled = null;
+    this._expression = exprStr;
+    this._compiledList = [];
+
+    for (const part of parts) {
+      try {
+        const compiled = math.compile(part);
+        // 验证至少有一个有效点
+        let valid = false;
+        for (const x of [0, 1, -1]) {
+          try {
+            const r = compiled.evaluate({ x });
+            if (typeof r === 'number' && isFinite(r)) { valid = true; break; }
+          } catch {}
+        }
+        if (!valid) {
+          this._compiledList = [];
+          return { success: false, error: `表达式 "${part}" 无法计算` };
+        }
+        this._compiledList.push({ compiled, expr: part });
+      } catch (e) {
+        this._compiledList = [];
+        return { success: false, error: `表达式 "${part}" 有误：${e.message}` };
+      }
+    }
+    return { success: true, count: this._compiledList.length };
+  }
+
+  get isMulti() { return this._compiledList.length > 1; }
+  get multiCount() { return this._compiledList.length || (this._compiled ? 1 : 0); }
+
+  // 在 x 处对第 i 个表达式求值
+  evaluateAt(x, index = 0) {
+    const compiled = this._compiledList[index]?.compiled || (index === 0 ? this._compiled : null);
+    if (!compiled) return { value: NaN, defined: false };
+    try {
+      const result = compiled.evaluate({ x });
+      if (typeof result !== 'number' || !isFinite(result)) return { value: NaN, defined: false };
+      return { value: result, defined: true };
+    } catch { return { value: NaN, defined: false }; }
   }
 
   // 编译表达式
@@ -341,5 +414,22 @@ export class MathEngine {
 
   get expression() {
     return this._expression;
+  }
+
+  // 数值定积分（梯形法则）
+  integrate(xMin, xMax, numSteps = 1000) {
+    const step = (xMax - xMin) / numSteps;
+    let sum = 0;
+    let prevResult = this.evaluate(xMin);
+    if (!prevResult.defined) return { value: NaN, defined: false };
+
+    for (let i = 1; i <= numSteps; i++) {
+      const x = xMin + i * step;
+      const curr = this.evaluate(x);
+      if (!curr.defined) return { value: NaN, defined: false };
+      sum += (prevResult.value + curr.value) * step / 2;
+      prevResult = curr;
+    }
+    return { value: sum, defined: true };
   }
 }

@@ -204,6 +204,32 @@ export class Scanner {
       refTone.gain.gain.setTargetAtTime(0, endTime - 0.1, 0.05);
     }
 
+    // 参照曲线：低音量 sawtooth 叠加
+    if (options.snapshotEngine) {
+      const snapEng = options.snapshotEngine;
+      const { points: snapPoints } = snapEng.sample(xMin, xMax, numSteps);
+      const snapVoice = this.audio.createOscillator('sawtooth');
+      snapVoice.osc.start(now);
+      snapVoice.osc.stop(now + duration + 1);
+      this._scheduledNodes.push(snapVoice);
+
+      for (let i = 0; i < numSteps; i++) {
+        if (signal.aborted) break;
+        const sp = snapPoints[i];
+        const t = now + i * stepDuration;
+        if (sp.defined) {
+          const freq = this.audio.yToFrequency(sp.y, yMin, yMax);
+          const pan = this.audio.xToPan(sp.x, xMin, xMax);
+          this.audio.setFrequencySmooth(snapVoice.osc, freq, t, stepDuration * 0.8);
+          this.audio.setPanSmooth(snapVoice.panner, pan, t, stepDuration * 0.8);
+          this.audio.setGainSmooth(snapVoice.gain, 0.12, t, stepDuration * 0.5);
+        } else {
+          this.audio.setGainSmooth(snapVoice.gain, 0, t, stepDuration * 0.3);
+        }
+      }
+      this.audio.setGainSmooth(snapVoice.gain, 0, endTime - 0.1, 0.1);
+    }
+
     // 进度跟踪
     this._trackProgress(now, duration, signal, onProgress, onComplete);
   }
@@ -340,6 +366,118 @@ export class Scanner {
     const endTime = now + duration;
     this.audio.setGainSmooth(melody.gain, 0, endTime - 0.1, 0.1);
     if (refTone) refTone.gain.gain.setTargetAtTime(0, endTime - 0.1, 0.05);
+
+    this._trackProgress(now, duration, signal, onProgress, onComplete);
+  }
+
+  // 多函数叠加播放
+  // options: { mathEngines[], xMin, xMax, duration, yMin, yMax, focusIndex, onProgress, onComplete, onSpecialPoint }
+  playMulti(options) {
+    this.stop();
+
+    const {
+      engines,       // MathEngine[] 每个已编译不同表达式
+      xMin, xMax, duration,
+      yMin: userYMin, yMax: userYMax,
+      focusIndex = 0,
+      onProgress, onComplete, onSpecialPoint
+    } = options;
+
+    this._playing = true;
+    this._abortController = new AbortController();
+    const signal = this._abortController.signal;
+
+    const numSteps = Math.max(200, Math.ceil(duration * 100));
+    const stepDuration = duration / numSteps;
+    const now = this.audio.currentTime + 0.05;
+
+    // 为每条曲线采样，计算统一 y 范围
+    const allYValues = [];
+    const curvesPoints = [];
+    for (const eng of engines) {
+      const { points, yMin: syMin, yMax: syMax } = eng.sample(xMin, xMax, numSteps);
+      curvesPoints.push(points);
+      for (const p of points) { if (p.defined) allYValues.push(p.y); }
+    }
+
+    let yMin, yMax;
+    if (userYMin !== undefined && userYMax !== undefined) {
+      yMin = userYMin; yMax = userYMax;
+    } else if (allYValues.length > 10) {
+      const sorted = [...allYValues].sort((a, b) => a - b);
+      yMin = sorted[Math.floor(sorted.length * 0.05)];
+      yMax = sorted[Math.ceil(sorted.length * 0.95) - 1];
+    } else {
+      yMin = allYValues.length ? Math.min(...allYValues) : -5;
+      yMax = allYValues.length ? Math.max(...allYValues) : 5;
+    }
+    const pad = Math.max(1, (yMax - yMin) * 0.1);
+    yMin -= pad; yMax += pad;
+    if (yMax - yMin < 1) { const mid = (yMax + yMin) / 2; yMin = mid - 1; yMax = mid + 1; }
+
+    // 波形分配：不同曲线用不同波形
+    const waveforms = ['sine', 'triangle', 'square', 'sawtooth'];
+    // 每条曲线创建独立振荡器
+    const voices = [];
+    for (let ci = 0; ci < engines.length; ci++) {
+      const waveform = waveforms[ci % waveforms.length];
+      const voice = this.audio.createOscillator(waveform);
+      voice.osc.start(now);
+      voice.osc.stop(now + duration + 1);
+      this._scheduledNodes.push(voice);
+      voices.push(voice);
+    }
+
+    // 为每条曲线调度参数
+    for (let ci = 0; ci < engines.length; ci++) {
+      const points = curvesPoints[ci];
+      const voice = voices[ci];
+      const isFocused = ci === focusIndex;
+      const volume = isFocused ? 0.5 : 0.15;
+
+      for (let i = 0; i < numSteps; i++) {
+        if (signal.aborted) break;
+        const p = points[i];
+        const t = now + i * stepDuration;
+
+        if (p.defined) {
+          const freq = this.audio.yToFrequency(p.y, yMin, yMax);
+          const pan = this.audio.xToPan(p.x, xMin, xMax);
+          this.audio.setFrequencySmooth(voice.osc, freq, t, stepDuration * 0.8);
+          this.audio.setPanSmooth(voice.panner, pan, t, stepDuration * 0.8);
+          this.audio.setGainSmooth(voice.gain, volume, t, stepDuration * 0.5);
+        } else {
+          this.audio.setGainSmooth(voice.gain, 0, t, stepDuration * 0.3);
+        }
+      }
+
+      // 结尾淡出
+      this.audio.setGainSmooth(voice.gain, 0, now + duration - 0.1, 0.1);
+    }
+
+    // 交叉点检测：相邻曲线的 y 差值变号
+    if (curvesPoints.length >= 2) {
+      for (let ci = 0; ci < curvesPoints.length - 1; ci++) {
+        const ptsA = curvesPoints[ci];
+        const ptsB = curvesPoints[ci + 1];
+        for (let i = 1; i < numSteps; i++) {
+          if (signal.aborted) break;
+          const a0 = ptsA[i - 1], a1 = ptsA[i];
+          const b0 = ptsB[i - 1], b1 = ptsB[i];
+          if (a0.defined && a1.defined && b0.defined && b1.defined) {
+            const diff0 = a0.y - b0.y;
+            const diff1 = a1.y - b1.y;
+            if (diff0 * diff1 < 0) {
+              const t = now + i * stepDuration;
+              this.sfx.intersection(t);
+              if (onSpecialPoint) {
+                onSpecialPoint({ type: 'intersection', x: (a1.x + b1.x) / 2 });
+              }
+            }
+          }
+        }
+      }
+    }
 
     this._trackProgress(now, duration, signal, onProgress, onComplete);
   }

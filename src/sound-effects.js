@@ -84,4 +84,9 @@ export class SoundEffects {
     const freq = positive ? 1800 : 300;
     this.audio.playTick(time, freq, 0.04, 0.2, pan);
   }
+
+  // S16 交叉点音效
+  intersection(time) {
+    this.audio.playIntersection(time, 800, 1200, 0.3);
+  }
 }

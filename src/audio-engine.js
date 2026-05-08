@@ -264,6 +264,32 @@ export class AudioEngine {
     return time + 0.14;
   }
 
+  // S16 交叉点：两个频率叠加的短暂和弦
+  playIntersection(time, freq1 = 800, freq2 = 1200, volume = 0.3) {
+    const duration = 0.1;
+    const osc1 = this.ctx.createOscillator();
+    const osc2 = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc1.type = 'sine';
+    osc1.frequency.value = freq1;
+    osc2.type = 'sine';
+    osc2.frequency.value = freq2;
+
+    gain.gain.setValueAtTime(0, time);
+    gain.gain.linearRampToValueAtTime(volume, time + 0.01);
+    gain.gain.linearRampToValueAtTime(0, time + duration);
+
+    osc1.connect(gain);
+    osc2.connect(gain);
+    gain.connect(this.masterGain);
+
+    osc1.start(time);
+    osc1.stop(time + duration + 0.01);
+    osc2.start(time);
+    osc2.stop(time + duration + 0.01);
+  }
+
   // 创建参考音（持续的 C4 持续音）
   createReferenceTone() {
     const osc = this.ctx.createOscillator();
@@ -277,6 +303,53 @@ export class AudioEngine {
     gain.connect(this.masterGain);
 
     return { osc, gain };
+  }
+
+  // 面积音效：持续和弦，时长与面积成正比
+  playAreaSound(area) {
+    const absArea = Math.abs(area);
+    const duration = Math.min(3, Math.max(0.3, Math.log2(absArea + 1) * 0.5));
+    const now = this.currentTime;
+
+    // 正面积用大三和弦，负面积用小三和弦
+    const positive = area >= 0;
+    const baseFreq = positive ? 440 : 415;
+    const thirdFreq = positive ? baseFreq * 5 / 4 : baseFreq * 6 / 5;
+    const fifthFreq = baseFreq * 3 / 2;
+
+    for (const freq of [baseFreq, thirdFreq, fifthFreq]) {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0, now);
+      gain.gain.linearRampToValueAtTime(0.15, now + 0.05);
+      gain.gain.setValueAtTime(0.15, now + duration - 0.1);
+      gain.gain.linearRampToValueAtTime(0, now + duration);
+      osc.connect(gain);
+      gain.connect(this.masterGain);
+      osc.start(now);
+      osc.stop(now + duration + 0.01);
+    }
+  }
+
+  // S18 坐标系切换音效：升调=放大，降调=缩小
+  playZoomSound(zoomIn) {
+    const now = this.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sine';
+    const startFreq = zoomIn ? 600 : 800;
+    const endFreq = zoomIn ? 900 : 500;
+    osc.frequency.setValueAtTime(startFreq, now);
+    osc.frequency.linearRampToValueAtTime(endFreq, now + 0.12);
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.2, now + 0.02);
+    gain.gain.linearRampToValueAtTime(0, now + 0.15);
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+    osc.start(now);
+    osc.stop(now + 0.18);
   }
 
   // 创建主旋律振荡器

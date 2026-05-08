@@ -28,6 +28,7 @@ export class App {
     this.state = 'idle'; // idle | summary | scanning | explore
     this.summaryEnabled = true;
     this.analysis = null;
+    this._snapshotEngine = null; // 参照函数的 MathEngine
     this.currentPoints = null;
     this.currentYRange = { yMin: -5, yMax: 5 };
 
@@ -50,6 +51,7 @@ export class App {
     this.nav.onRangeChange = (xMin, xMax) => this._onRangeChange(xMin, xMax);
     this.nav.onDerivativeToggle = (on) => this._onDerivativeToggle(on);
     this.nav.onParamChange = (expr, param, value) => this._onParamChange(expr, param, value);
+    this.nav.onSnapshotToggle = () => this._toggleSnapshot();
 
     // 检查是否是首次使用
     if (!localStorage.getItem('mathSonification.visited')) {
@@ -102,6 +104,7 @@ export class App {
       contrastBtn: $('btn-contrast'),
       paramsDisplay: $('params-display'),
       paramsText: $('params-text'),
+      snapshotBtn: $('btn-snapshot'),
     };
   }
 
@@ -124,6 +127,7 @@ export class App {
     this.els.selftestClose.addEventListener('click', () => this.selftest.close());
     this.els.selftestAnswer.addEventListener('click', () => this.selftest.submitAnswer());
     this.els.contrastBtn.addEventListener('click', () => this._toggleContrast());
+    this.els.snapshotBtn.addEventListener('click', () => this._toggleSnapshot());
   }
 
   _renderPresets() {
@@ -167,7 +171,14 @@ export class App {
     }
     this._pendingPreset = null;
 
-    // 编译表达式
+    // 检测多表达式（分号分隔）
+    const hasMultipleExprs = expr.includes(';');
+    if (hasMultipleExprs) {
+      this._onPlayMulti(expr);
+      return;
+    }
+
+    // 编译单表达式
     const result = this.math.compile(expr);
     if (!result.success) {
       this.speech.speakError(`表达式有误：${result.error}。请检查后重试。`);
@@ -255,6 +266,7 @@ export class App {
               yMax: this.currentYRange.yMax,
               referenceTone: this.nav.referenceTone,
               analysis: this.analysis,
+              snapshotEngine: this._snapshotEngine || undefined,
               onProgress: (progress) => {
                 this._updateScanLine(progress);
               },
@@ -275,6 +287,68 @@ export class App {
     };
 
     startFastScan();
+  }
+
+  // 多函数叠加播放
+  _onPlayMulti(exprStr) {
+    const result = this.math.compileMulti(exprStr);
+    if (!result.success) {
+      this.speech.speakError(`表达式有误：${result.error}`);
+      this._updateStatus(`表达式错误：${result.error}`);
+      return;
+    }
+
+    this.sfx.confirm(this.audio.currentTime);
+    this._multiExprStr = exprStr;
+    this._multiFocusIndex = 0;
+
+    const xMin = parseFloat(this.els.xMin.value) || -10;
+    const xMax = parseFloat(this.els.xMax.value) || 10;
+    this.nav.xMin = xMin;
+    this.nav.xMax = xMax;
+    this.nav._multiEngines = this.math._compiledList.map(c => {
+      const eng = new MathEngine();
+      eng._compiled = c.compiled;
+      eng._expression = c.expr;
+      return eng;
+    });
+
+    const count = result.count;
+    const summary = `正在播放 ${count} 个函数的叠加声觉化。按 Tab 键切换焦点曲线。`;
+    this._updateStatus(summary);
+    this.els.playBtn.disabled = true;
+    this.els.stopBtn.disabled = false;
+    this.state = 'scanning';
+
+    if (this.summaryEnabled) {
+      this.speech.speak(summary, { priority: true, onEnd: () => this._startMultiScan() });
+    } else {
+      this._startMultiScan();
+    }
+  }
+
+  _startMultiScan() {
+    const xMin = this.nav.xMin;
+    const xMax = this.nav.xMax;
+    const speed = this.els.speed.value;
+    const durations = { fast: 2.5, normal: 5, slow: 10 };
+    const duration = durations[speed] || 5;
+    const engines = this.nav._multiEngines;
+
+    if (!engines || engines.length === 0) return;
+
+    this.scanner.playMulti({
+      engines,
+      xMin, xMax, duration,
+      focusIndex: this._multiFocusIndex || 0,
+      onProgress: (progress) => this._updateScanLine(progress),
+      onComplete: () => {
+        this.state = 'explore';
+        this.els.playBtn.disabled = false;
+        this.els.stopBtn.disabled = true;
+        this.speech.speak('多函数扫描完成。', { rate: 1.3 });
+      }
+    });
   }
 
   _onStop() {
@@ -335,7 +409,6 @@ export class App {
 
   _onNavigatorChange(info) {
     if (info.action === 'playFrom') {
-      // 从当前位置开始扫描
       this._onPlay();
       return;
     }
@@ -344,8 +417,14 @@ export class App {
       this.els.referenceBtn.setAttribute('aria-pressed', info.value);
       return;
     }
+    if (info.action === 'switchFocus') {
+      this._multiFocusIndex = info.focusIndex;
+      if (this.state === 'explore' && this.nav._multiEngines) {
+        this._startMultiScan();
+      }
+      return;
+    }
 
-    // 更新当前探索位置的可视化
     this._updateExplorationVisual(info);
   }
 
@@ -462,6 +541,28 @@ export class App {
     const isHC = document.body.classList.toggle('high-contrast');
     this.els.contrastBtn.setAttribute('aria-pressed', isHC);
     this.speech.speakAction(isHC ? '高对比度模式已开启' : '高对比度模式已关闭');
+  }
+
+  _toggleSnapshot() {
+    if (this._snapshotEngine) {
+      this._snapshotEngine = null;
+      this.els.snapshotBtn.textContent = '保存参照';
+      this.els.snapshotBtn.setAttribute('aria-pressed', false);
+      this.speech.speakAction('参照函数已清除');
+      return;
+    }
+    if (!this.math._compiled) {
+      this.speech.speakError('请先播放一个函数，再保存为参照');
+      return;
+    }
+    // 克隆当前引擎
+    const snap = new MathEngine();
+    snap._compiled = this.math._compiled;
+    snap._expression = this.math._expression;
+    this._snapshotEngine = snap;
+    this.els.snapshotBtn.textContent = '清除参照';
+    this.els.snapshotBtn.setAttribute('aria-pressed', true);
+    this.speech.speakAction(`已保存 ${this.math._expression} 作为参照函数`);
   }
 }
 

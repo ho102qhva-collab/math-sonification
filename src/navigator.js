@@ -23,11 +23,13 @@ export class Navigator {
     this.onRangeChange = null;
     this.onDerivativeToggle = null;
     this.onBookmark = null;
+    this.onSnapshotToggle = null;
 
     this._bound = false;
     this.activePreset = null;
     this.paramValue = null;
-  }
+    this._multiEngines = null;
+    this._multiFocusIndex = 0;
   }
 
   bind(element = document) {
@@ -76,6 +78,13 @@ export class Navigator {
       'R': () => this.toggleReference(),
       '[': () => this.adjustParam(-1),
       ']': () => this.adjustParam(1),
+      'Tab': () => { e.preventDefault(); this.switchFocus(); },
+      's': () => this._toggleSnapshot(),
+      'S': () => this._toggleSnapshot(),
+      'i': () => this.reportIntegral(),
+      'I': () => this.reportIntegral(),
+      'v': () => this.annotateBookmark(),
+      'V': () => this.annotateBookmark(),
       'Escape': () => this.stopPlayback(),
     };
 
@@ -180,6 +189,7 @@ export class Navigator {
     this.xMin = center - newRange;
     this.xMax = center + newRange;
     if (this.onRangeChange) this.onRangeChange(this.xMin, this.xMax);
+    this.audio.playZoomSound(true);
     this.speech.speakAction(`放大，范围 ${this.xMin.toFixed(1)} 到 ${this.xMax.toFixed(1)}`);
   }
 
@@ -194,6 +204,7 @@ export class Navigator {
     this.xMin = center - newRange;
     this.xMax = center + newRange;
     if (this.onRangeChange) this.onRangeChange(this.xMin, this.xMax);
+    this.audio.playZoomSound(false);
     this.speech.speakAction(`缩小，范围 ${this.xMin.toFixed(1)} 到 ${this.xMax.toFixed(1)}`);
   }
 
@@ -222,7 +233,9 @@ export class Navigator {
     this.currentX = bm.x;
     this._playStep();
     this._notifyPosition();
-    this.speech.speakAction(`跳转到书签 x等于${bm.x.toFixed(2)}`);
+    let msg = `跳转到书签 x等于${bm.x.toFixed(2)}`;
+    if (bm.note) msg += `，备注：${bm.note}`;
+    this.speech.speakAction(msg);
   }
 
   toggleReference() {
@@ -264,16 +277,16 @@ export class Navigator {
     const freq = this.audio.yToFrequency(value, yMin, yMax);
     const pan = this.audio.xToPan(this.currentX, this.xMin, this.xMax);
 
-    const now = this.audio.currentTime;
+    const audioNow = this.audio.currentTime;
     const { osc, gain, panner } = this.audio.createOscillator(this.audio.getWaveformForY(value));
-    osc.frequency.setValueAtTime(freq, now);
-    panner.pan.setValueAtTime(pan, now);
-    gain.gain.setValueAtTime(0, now);
-    gain.gain.linearRampToValueAtTime(0.4, now + 0.01);
-    gain.gain.linearRampToValueAtTime(0, now + 0.2);
+    osc.frequency.setValueAtTime(freq, audioNow);
+    panner.pan.setValueAtTime(pan, audioNow);
+    gain.gain.setValueAtTime(0, audioNow);
+    gain.gain.linearRampToValueAtTime(0.4, audioNow + 0.01);
+    gain.gain.linearRampToValueAtTime(0, audioNow + 0.2);
 
-    osc.start(now);
-    osc.stop(now + 0.25);
+    osc.start(audioNow);
+    osc.stop(audioNow + 0.25);
   }
 
   _getYRange() {
@@ -325,5 +338,57 @@ export class Navigator {
     this.paramValue = rounded;
     const expr = preset.expr.replace(preset.param, String(rounded));
     if (this.onParamChange) this.onParamChange(expr, preset.param, rounded);
+  }
+
+  switchFocus() {
+    const engines = this._multiEngines;
+    if (!engines || engines.length <= 1) {
+      this.speech.speakAction('没有其他函数可切换，请用分号输入多个表达式');
+      return;
+    }
+    this._multiFocusIndex = (this._multiFocusIndex + 1) % engines.length;
+    const idx = this._multiFocusIndex + 1;
+    this.speech.speakAction(`焦点切换到第${idx}条曲线`);
+    if (this.onPositionChange) {
+      this.onPositionChange({ action: 'switchFocus', focusIndex: this._multiFocusIndex });
+    }
+  }
+
+  _toggleSnapshot() {
+    if (this.onSnapshotToggle) this.onSnapshotToggle();
+  }
+
+  reportIntegral() {
+    if (this.bookmarks.length < 2) {
+      this.speech.speakAction('请先用 B 键打至少两个书签，再用 I 键播报区间面积');
+      return;
+    }
+    const last = this.bookmarks[this.bookmarks.length - 1];
+    const prev = this.bookmarks[this.bookmarks.length - 2];
+    const xA = Math.min(prev.x, last.x);
+    const xB = Math.max(prev.x, last.x);
+    const { value, defined } = this.math.integrate(xA, xB);
+    if (!defined) {
+      this.speech.speakAction('该区间内函数无法计算积分');
+      return;
+    }
+    this.audio.playAreaSound(value);
+    const sign = value >= 0 ? '' : '负';
+    this.speech.speakAction(
+      `x从${xA.toFixed(2)}到${xB.toFixed(2)}的定积分为${sign}${Math.abs(value).toFixed(3)}`
+    );
+  }
+
+  annotateBookmark() {
+    if (this.bookmarks.length === 0) {
+      this.speech.speakAction('没有书签可备注，请先用 B 键打书签');
+      return;
+    }
+    const bm = this.bookmarks[this.bookmarkIndex >= 0 ? this.bookmarkIndex : this.bookmarks.length - 1];
+    const note = prompt(`为书签 x=${bm.x.toFixed(2)} 添加备注：`);
+    if (note && note.trim()) {
+      bm.note = note.trim();
+      this.speech.speakAction(`备注已保存：${note.trim()}`);
+    }
   }
 }
