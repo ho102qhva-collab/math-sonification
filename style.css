@@ -1,0 +1,331 @@
+/* ===== 全局与无障碍 ===== */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --bg: #0a0a0a;
+  --bg-surface: #1a1a1a;
+  --bg-input: #2a2a2a;
+  --text: #f0f0f0;
+  --text-dim: #999;
+  --accent: #4fc3f7;
+  --accent-hover: #29b6f6;
+  --positive: #81c784;
+  --negative: #e57373;
+  --warning: #ffb74d;
+  --border: #444;
+  --focus-ring: 3px solid var(--accent);
+  --radius: 6px;
+  --font: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  --mono: "Cascadia Code", "Consolas", monospace;
+}
+
+html {
+  font-size: 18px;
+}
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+  min-height: 100vh;
+}
+
+/* Screen reader only */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+
+/* ===== 布局 ===== */
+#app {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+header {
+  text-align: center;
+  padding: 1rem 0;
+  border-bottom: 2px solid var(--border);
+  margin-bottom: 1rem;
+}
+
+header h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--accent);
+  margin-bottom: 0.25rem;
+}
+
+#status-bar {
+  font-size: 0.9rem;
+  color: var(--text-dim);
+  min-height: 1.6em;
+}
+
+main > section {
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background: var(--bg-surface);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+
+/* ===== 输入区 ===== */
+.input-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.input-row label {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+#expression-input {
+  flex: 1;
+  min-width: 200px;
+  padding: 0.5rem 0.75rem;
+  font-size: 1.1rem;
+  font-family: var(--mono);
+  background: var(--bg-input);
+  color: var(--text);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+}
+
+#expression-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 var(--focus-ring);
+}
+
+.help-text {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  margin-top: 0.5rem;
+}
+
+.help-text details {
+  margin-top: 0.5rem;
+}
+
+.help-text summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.help-text table {
+  margin-top: 0.5rem;
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.help-text td {
+  padding: 0.2rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.help-text td:first-child {
+  font-family: var(--mono);
+  white-space: nowrap;
+  color: var(--accent);
+  width: 120px;
+}
+
+#params-display {
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+  background: var(--bg-input);
+  border-radius: var(--radius);
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* ===== 按钮 ===== */
+button {
+  padding: 0.5rem 1rem;
+  font-size: 1rem;
+  font-family: var(--font);
+  font-weight: 600;
+  background: var(--accent);
+  color: #000;
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+button:hover {
+  background: var(--accent-hover);
+}
+
+button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 var(--focus-ring);
+}
+
+button:disabled {
+  background: #555;
+  color: #888;
+  cursor: not-allowed;
+}
+
+button[aria-pressed="true"] {
+  background: var(--positive);
+  color: #000;
+}
+
+/* ===== 预置函数 ===== */
+#presets-section {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1rem;
+}
+
+#presets-section label {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+#preset-select {
+  flex: 1;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.95rem;
+  font-family: var(--font);
+  background: var(--bg-input);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+#preset-select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+}
+
+/* ===== Canvas 可视化 ===== */
+#graph-canvas {
+  width: 100%;
+  height: auto;
+  background: #111;
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+}
+
+/* ===== 控制面板 ===== */
+.controls-row {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.control-group {
+  display: flex;
+  gap: 0.3rem;
+  align-items: center;
+}
+
+.control-label {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+input[type="number"] {
+  width: 70px;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.9rem;
+  font-family: var(--mono);
+  background: var(--bg-input);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+input[type="number"]:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+select {
+  padding: 0.3rem 0.5rem;
+  font-size: 0.9rem;
+  background: var(--bg-input);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* ===== 对话框 ===== */
+.dialog {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.dialog-content {
+  background: var(--bg-surface);
+  border: 2px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  max-width: 600px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.dialog-content h2 {
+  color: var(--accent);
+  margin-bottom: 1rem;
+}
+
+.dialog-actions {
+  margin-top: 1rem;
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+/* ===== 教学区域按钮 ===== */
+#tutorial-section {
+  display: flex;
+  gap: 0.5rem;
+}
+
+/* ===== 响应式 ===== */
+@media (max-width: 600px) {
+  html { font-size: 16px; }
+  .input-row { flex-direction: column; align-items: stretch; }
+  #expression-input { min-width: unset; }
+  .controls-row { flex-direction: column; align-items: stretch; }
+  .control-group { flex-wrap: wrap; }
+}

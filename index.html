@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>数学声觉化工具 — 用耳朵感知数学</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app" role="application" aria-label="数学声觉化工具">
+    <!-- 顶部栏 -->
+    <header role="banner">
+      <h1>数学声觉化工具</h1>
+      <p id="status-bar" role="status" aria-live="polite">就绪。请输入函数表达式或从预置库选择。</p>
+    </header>
+
+    <main>
+      <!-- 输入区域 -->
+      <section id="input-section" aria-label="函数输入">
+        <div class="input-row">
+          <label for="expression-input">函数表达式：</label>
+          <input
+            type="text"
+            id="expression-input"
+            placeholder="例如：x^2, sin(x), x^3 - 3*x + 1"
+            autocomplete="off"
+            aria-describedby="expression-help"
+            spellcheck="false"
+          >
+          <button id="btn-play" aria-label="播放当前函数的声觉化">播放</button>
+          <button id="btn-stop" aria-label="停止播放" disabled>停止</button>
+        </div>
+        <p id="expression-help" class="help-text">
+          支持常见数学函数：sin, cos, tan, log, sqrt, abs, exp 等。用 ^ 表示幂次。
+        </p>
+
+        <!-- 参数显示 -->
+        <div id="params-display" class="hidden" aria-label="函数参数">
+          <span id="params-text" aria-live="polite"></span>
+        </div>
+      </section>
+
+      <!-- 预置函数库 -->
+      <section id="presets-section" aria-label="预置函数库">
+        <label for="preset-select">预置函数：</label>
+        <select id="preset-select" aria-label="选择预置函数">
+          <option value="">-- 选择函数 --</option>
+        </select>
+      </section>
+
+      <!-- 可视化区域（低视力支持） -->
+      <section id="visual-section" aria-label="函数图形">
+        <canvas id="graph-canvas" width="800" height="400" role="img" aria-label="函数图形可视化">
+          您的浏览器不支持Canvas，但声觉化功能不受影响。
+        </canvas>
+        <div id="cursor-info" aria-live="polite" class="sr-only"></div>
+      </section>
+
+      <!-- 控制面板 -->
+      <section id="controls-section" aria-label="导航控制">
+        <div class="controls-row">
+          <div class="control-group">
+            <span class="control-label">扫描范围 X：</span>
+            <label for="x-min" class="sr-only">X 最小值</label>
+            <input type="number" id="x-min" value="-10" step="1" aria-label="X 范围最小值">
+            <span aria-hidden="true">~</span>
+            <label for="x-max" class="sr-only">X 最大值</label>
+            <input type="number" id="x-max" value="10" step="1" aria-label="X 范围最大值">
+          </div>
+          <div class="control-group">
+            <label for="speed-select">扫描速度：</label>
+            <select id="speed-select" aria-label="选择扫描速度">
+              <option value="fast">快速扫描（~2秒）</option>
+              <option value="normal" selected>中速扫描（~5秒）</option>
+              <option value="slow">慢速扫描（~10秒）</option>
+            </select>
+          </div>
+          <div class="control-group">
+            <button id="btn-derivative" aria-pressed="false" aria-label="切换导数模式">
+              导数模式：关
+            </button>
+            <button id="btn-reference" aria-pressed="true" aria-label="切换参考音">
+              参考音：开
+            </button>
+            <button id="btn-summary" aria-pressed="true" aria-label="切换语音摘要播报">
+              语音摘要：开
+            </button>
+          </div>
+        </div>
+        <div id="keyboard-hints" class="help-text" aria-label="键盘快捷键">
+          <details>
+            <summary>键盘操作指南</summary>
+            <table>
+              <tbody>
+                <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>沿曲线逐步移动</td></tr>
+                <tr><td><kbd>↑</kbd> <kbd>↓</kbd></td><td>调整步长大小</td></tr>
+                <tr><td><kbd>Space</kbd></td><td>从当前位置开始播放</td></tr>
+                <tr><td><kbd>Enter</kbd></td><td>语音报出当前坐标</td></tr>
+                <tr><td><kbd>Z</kbd></td><td>跳转到最近的零点</td></tr>
+                <tr><td><kbd>M</kbd></td><td>跳转到最近的极值点</td></tr>
+                <tr><td><kbd>Home</kbd> / <kbd>End</kbd></td><td>跳到起点/终点</td></tr>
+                <tr><td><kbd>D</kbd></td><td>切换导数模式</td></tr>
+                <tr><td><kbd>+</kbd> <kbd>-</kbd></td><td>缩放（放大/缩小x范围）</td></tr>
+                <tr><td><kbd>B</kbd></td><td>在当前位置打书签</td></tr>
+                <tr><td><kbd>Shift</kbd>+<kbd>B</kbd></td><td>跳转到上一个书签</td></tr>
+                <tr><td><kbd>R</kbd></td><td>切换参考音</td></tr>
+              </tbody>
+            </table>
+          </details>
+        </div>
+      </section>
+
+      <!-- 教学入口 -->
+      <section id="tutorial-section" aria-label="教学引导">
+        <button id="btn-tutorial" aria-label="开始教学课程">开始教学引导</button>
+        <button id="btn-selftest" aria-label="开始自测">自测练习</button>
+      </section>
+    </main>
+
+    <!-- 教学对话框 -->
+    <div id="tutorial-dialog" class="dialog hidden" role="dialog" aria-label="教学引导" aria-modal="true">
+      <div class="dialog-content">
+        <h2 id="tutorial-title"></h2>
+        <div id="tutorial-body"></div>
+        <div class="dialog-actions">
+          <button id="btn-tutorial-next" aria-label="下一步">下一步</button>
+          <button id="btn-tutorial-skip" aria-label="跳过教学">跳过</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 自测对话框 -->
+    <div id="selftest-dialog" class="dialog hidden" role="dialog" aria-label="自测练习" aria-modal="true">
+      <div class="dialog-content">
+        <h2>自测练习</h2>
+        <div id="selftest-body"></div>
+        <div class="dialog-actions">
+          <button id="btn-selftest-answer" aria-label="提交答案">提交</button>
+          <button id="btn-selftest-close" aria-label="关闭自测">关闭</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="src/app.js"></script>
+</body>
+</html>
