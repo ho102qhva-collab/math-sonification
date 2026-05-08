@@ -86,6 +86,14 @@ export const PRESETS = [
   { category: '摆线', name: '摆线', type: 'parametric',
     xFn: t => t - Math.sin(t), yFn: t => 1 - Math.cos(t),
     tMin: 0, tMax: 6 * Math.PI },
+
+  // === 参数调节模板 ===
+  { category: '参数调节', name: 'a·sin(x)', expr: 'a*sin(x)', xMin: -7, xMax: 7, param: 'a', paramValue: 1, paramMin: -5, paramMax: 5, paramStep: 0.1 },
+  { category: '参数调节', name: 'a·cos(x)', expr: 'a*cos(x)', xMin: -7, xMax: 7, param: 'a', paramValue: 1, paramMin: -5, paramMax: 5, paramStep: 0.1 },
+  { category: '参数调节', name: 'sin(b·x)', expr: 'sin(b*x)', xMin: -7, xMax: 7, param: 'b', paramValue: 1, paramMin: 0.1, paramMax: 10, paramStep: 0.1 },
+  { category: '参数调节', name: 'a·x²', expr: 'a*x^2', xMin: -5, xMax: 5, param: 'a', paramValue: 1, paramMin: -3, paramMax: 3, paramStep: 0.1 },
+  { category: '参数调节', name: 'a·x³', expr: 'a*x^3', xMin: -3, xMax: 3, param: 'a', paramValue: 1, paramMin: -3, paramMax: 3, paramStep: 0.1 },
+  { category: '参数调节', name: 'exp(a·x)', expr: 'exp(a*x)', xMin: -3, xMax: 3, param: 'a', paramValue: 1, paramMin: -2, paramMax: 2, paramStep: 0.1 },
 ];
 
 // 渲染为 <select> 下拉菜单

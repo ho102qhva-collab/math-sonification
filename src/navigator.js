@@ -25,6 +25,9 @@ export class Navigator {
     this.onBookmark = null;
 
     this._bound = false;
+    this.activePreset = null;
+    this.paramValue = null;
+  }
   }
 
   bind(element = document) {
@@ -71,6 +74,8 @@ export class Navigator {
       },
       'r': () => this.toggleReference(),
       'R': () => this.toggleReference(),
+      '[': () => this.adjustParam(-1),
+      ']': () => this.adjustParam(1),
       'Escape': () => this.stopPlayback(),
     };
 
@@ -165,8 +170,12 @@ export class Navigator {
   }
 
   zoomIn() {
+    const range = this.xMax - this.xMin;
+    if (range <= 0.1) {
+      this.speech.speakAction('已达到最大放大倍数');
+      return;
+    }
     const center = this.currentX;
-    const range = (this.xMax - this.xMin) / 2;
     const newRange = range / 2;
     this.xMin = center - newRange;
     this.xMax = center + newRange;
@@ -175,8 +184,12 @@ export class Navigator {
   }
 
   zoomOut() {
+    const range = this.xMax - this.xMin;
+    if (range >= 1000) {
+      this.speech.speakAction('已达到最小缩放倍数');
+      return;
+    }
     const center = this.currentX;
-    const range = (this.xMax - this.xMin) / 2;
     const newRange = range * 2;
     this.xMin = center - newRange;
     this.xMax = center + newRange;
@@ -227,6 +240,21 @@ export class Navigator {
 
   // 在当前步进位置播放一个短音
   _playStep() {
+    // 听觉疲劳管理：连续探索每 10 秒插入静音间隔
+    const now = Date.now();
+    if (this._lastStepTime) {
+      const elapsed = now - this._lastStepTime;
+      if (elapsed < 10000) {
+        // 在同一个 10 秒窗口内，正常播放
+      } else if (elapsed < 11000) {
+        // 进入静音间隔，跳过播放
+        this._lastStepTime = now;
+        return;
+      }
+      // 超过 11 秒，重置窗口
+    }
+    this._lastStepTime = now;
+
     const fn = this.derivativeMode ? (x) => this.math.derivative(x) : (x) => this.math.evaluate(x);
     const { value, defined } = fn(this.currentX);
 
@@ -280,5 +308,22 @@ export class Navigator {
         xMax: this.xMax
       });
     }
+  }
+
+  adjustParam(direction) {
+    const preset = this.activePreset;
+    if (!preset || !preset.param) {
+      this.speech.speakAction('当前函数不支持参数调节，请从"参数调节"类别选择');
+      return;
+    }
+    const step = preset.paramStep * direction;
+    this.paramValue = Math.max(
+      preset.paramMin,
+      Math.min(preset.paramMax, (this.paramValue ?? preset.paramValue) + step)
+    );
+    const rounded = Math.round(this.paramValue * 100) / 100;
+    this.paramValue = rounded;
+    const expr = preset.expr.replace(preset.param, String(rounded));
+    if (this.onParamChange) this.onParamChange(expr, preset.param, rounded);
   }
 }

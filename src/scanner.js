@@ -27,12 +27,12 @@ export class Scanner {
       this._abortController.abort();
       this._abortController = null;
     }
-    // 断开所有已调度的节点
     for (const node of this._scheduledNodes) {
       try {
         if (node.osc) { node.osc.stop(); node.osc.disconnect(); }
         if (node.gain) node.gain.disconnect();
         if (node.panner) node.panner.disconnect();
+        if (node.source) { node.source.stop(); node.source.disconnect(); }
       } catch { /* already stopped */ }
     }
     this._scheduledNodes = [];
@@ -186,6 +186,8 @@ export class Scanner {
             this.sfx.maxDing(t, sp.x, xMin, xMax);
           } else if (sp.type === 'min') {
             this.sfx.minDing(t, sp.x, xMin, xMax);
+          } else if (sp.type === 'inflection') {
+            this.sfx.inflection(t);
           }
           if (onSpecialPoint) onSpecialPoint(sp);
         }
@@ -216,6 +218,13 @@ export class Scanner {
       const idx = Math.round((ext.x - xMin) / step);
       if (idx >= 0 && idx < numSteps) {
         schedule.push({ stepIndex: idx, type: ext.type, x: ext.x, y: ext.y });
+      }
+    }
+
+    for (const inf of (analysis.inflections || [])) {
+      const idx = Math.round((inf.x - xMin) / step);
+      if (idx >= 0 && idx < numSteps) {
+        schedule.push({ stepIndex: idx, type: 'inflection', x: inf.x });
       }
     }
 

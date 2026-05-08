@@ -49,13 +49,25 @@ export class App {
     this.nav.onPositionChange = (info) => this._onNavigatorChange(info);
     this.nav.onRangeChange = (xMin, xMax) => this._onRangeChange(xMin, xMax);
     this.nav.onDerivativeToggle = (on) => this._onDerivativeToggle(on);
+    this.nav.onParamChange = (expr, param, value) => this._onParamChange(expr, param, value);
 
     // 检查是否是首次使用
     if (!localStorage.getItem('mathSonification.visited')) {
-      this.speech.speak(
-        '欢迎使用数学声觉化工具。请输入一个函数表达式，或从预置函数库中选择一个函数开始探索。',
-        { priority: true }
-      );
+      const audioOk = !!(window.AudioContext || window.webkitAudioContext);
+      const speechOk = !!window.speechSynthesis;
+      if (!audioOk) {
+        this._updateStatus('您的浏览器不支持 Web Audio API，声觉化功能无法使用。请使用最新版 Chrome 或 Edge。');
+      } else if (!speechOk) {
+        this.speech.speak(
+          '欢迎使用数学声觉化工具。您的浏览器语音合成不可用，部分语音提示将无法播放，但声觉化功能正常。',
+          { priority: true }
+        );
+      } else {
+        this.speech.speak(
+          '欢迎使用数学声觉化工具。正在为您开启教学引导。',
+          { priority: true, onEnd: () => this.tutorial.start() }
+        );
+      }
       localStorage.setItem('mathSonification.visited', 'true');
     }
   }
@@ -87,6 +99,9 @@ export class App {
       selftestBody: $('selftest-body'),
       selftestAnswer: $('btn-selftest-answer'),
       selftestClose: $('btn-selftest-close'),
+      contrastBtn: $('btn-contrast'),
+      paramsDisplay: $('params-display'),
+      paramsText: $('params-text'),
     };
   }
 
@@ -108,6 +123,7 @@ export class App {
     this.els.tutorialNext.addEventListener('click', () => this.tutorial.nextStep());
     this.els.selftestClose.addEventListener('click', () => this.selftest.close());
     this.els.selftestAnswer.addEventListener('click', () => this.selftest.submitAnswer());
+    this.els.contrastBtn.addEventListener('click', () => this._toggleContrast());
   }
 
   _renderPresets() {
@@ -118,13 +134,24 @@ export class App {
       if (preset.xMax !== undefined) this.els.xMax.value = preset.xMax;
       this.nav.xMin = preset.xMin ?? -10;
       this.nav.xMax = preset.xMax ?? 10;
+      // 保存参数调节预设信息
+      if (preset.param) {
+        this.nav.activePreset = preset;
+        this.nav.paramValue = preset.paramValue;
+        this.els.paramsDisplay?.classList.remove('hidden');
+      } else {
+        this.nav.activePreset = null;
+        this.nav.paramValue = null;
+      }
     });
   }
 
   // 主播放入口
   async _onPlay() {
-    // 初始化音频（需要用户交互触发）
-    this.audio.init();
+    if (!this.audio.init()) {
+      this._updateStatus('音频系统初始化失败。请检查浏览器是否支持 Web Audio API。');
+      return;
+    }
 
     const expr = this.els.input.value.trim();
     if (!expr) {
@@ -158,7 +185,14 @@ export class App {
     this.nav.xMax = xMax;
 
     // 分析函数
+    const analyzeStart = performance.now();
     this.analysis = this.math.analyze(xMin, xMax);
+    const analyzeTime = performance.now() - analyzeStart;
+
+    // S21: 计算超过 1 秒时语音提示
+    if (analyzeTime > 1000) {
+      this.speech.speakAction('计算已完成');
+    }
     const { points, yMin, yMax } = this.math.sample(xMin, xMax, 500);
     this.currentPoints = points;
     const pad = Math.max(1, (yMax - yMin) * 0.1);
@@ -193,27 +227,54 @@ export class App {
     const durations = { fast: 2.5, normal: 5, slow: 10 };
     const duration = durations[speed] || 5;
 
+    // 感知协议：先用快速扫描获得整体印象，再用正常速度感知细节
+    const fastDuration = Math.min(2.5, duration * 0.4);
+    this._scanPass = 0;
+
     this.state = 'scanning';
 
-    this.scanner.play({
-      xMin, xMax, duration,
-      yMin: this.currentYRange.yMin,
-      yMax: this.currentYRange.yMax,
-      referenceTone: this.nav.referenceTone,
-      analysis: this.analysis,
-      onProgress: (progress) => {
-        this._updateScanLine(progress);
-      },
-      onComplete: () => {
-        this.state = 'explore';
-        this.els.playBtn.disabled = false;
-        this.els.stopBtn.disabled = true;
-        this.speech.speak('扫描完成，现在可以使用方向键自由探索。', { rate: 1.3 });
-      },
-      onSpecialPoint: (sp) => {
-        this._onSpecialPoint(sp);
-      }
-    });
+    const startFastScan = () => {
+      this._scanPass = 1;
+      this.scanner.play({
+        xMin, xMax, duration: fastDuration,
+        yMin: this.currentYRange.yMin,
+        yMax: this.currentYRange.yMax,
+        referenceTone: false,
+        analysis: this.analysis,
+        onProgress: (progress) => {
+          this._updateScanLine(progress);
+        },
+        onComplete: () => {
+          // 快扫结束，短暂间隔后开始正常扫描
+          setTimeout(() => {
+            if (this.state !== 'scanning') return;
+            this._scanPass = 2;
+            this.scanner.play({
+              xMin, xMax, duration,
+              yMin: this.currentYRange.yMin,
+              yMax: this.currentYRange.yMax,
+              referenceTone: this.nav.referenceTone,
+              analysis: this.analysis,
+              onProgress: (progress) => {
+                this._updateScanLine(progress);
+              },
+              onComplete: () => {
+                this.state = 'explore';
+                this.els.playBtn.disabled = false;
+                this.els.stopBtn.disabled = true;
+                this.speech.speak('扫描完成，现在可以使用方向键自由探索。', { rate: 1.3 });
+              },
+              onSpecialPoint: (sp) => {
+                this._onSpecialPoint(sp);
+              }
+            });
+          }, 300);
+        },
+        onSpecialPoint: () => {} // 快扫不播放特殊点音效
+      });
+    };
+
+    startFastScan();
   }
 
   _onStop() {
@@ -228,7 +289,10 @@ export class App {
 
   // 参数方程播放
   _playParametric(preset) {
-    this.audio.init();
+    if (!this.audio.init()) {
+      this._updateStatus('音频系统初始化失败。');
+      return;
+    }
     this.sfx.confirm(this.audio.currentTime);
 
     this.els.playBtn.disabled = true;
@@ -303,6 +367,15 @@ export class App {
   _onDerivativeToggle(on) {
     this.els.derivativeBtn.textContent = `导数模式：${on ? '开' : '关'}`;
     this.els.derivativeBtn.setAttribute('aria-pressed', on);
+  }
+
+  _onParamChange(expr, param, value) {
+    this.els.input.value = expr;
+    if (this.els.paramsText) {
+      this.els.paramsText.textContent = `${param} = ${value}`;
+    }
+    this.speech.speakAction(`${param} 等于 ${value}`);
+    this._onPlay();
   }
 
   _toggleSummary() {
@@ -383,6 +456,12 @@ export class App {
     if (this.els.status) {
       this.els.status.textContent = text;
     }
+  }
+
+  _toggleContrast() {
+    const isHC = document.body.classList.toggle('high-contrast');
+    this.els.contrastBtn.setAttribute('aria-pressed', isHC);
+    this.speech.speakAction(isHC ? '高对比度模式已开启' : '高对比度模式已关闭');
   }
 }
 

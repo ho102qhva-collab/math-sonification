@@ -4,7 +4,8 @@
 import { create, all } from 'https://cdn.jsdelivr.net/npm/mathjs@13.2.2/+esm';
 import { exprToChinese } from './expr-speech.js';
 
-const math = create(all);
+const { importFactory, parse, evaluate: evalFn, ...safeFns } = all;
+const math = create(safeFns);
 
 export class MathEngine {
   constructor() {
@@ -88,7 +89,10 @@ export class MathEngine {
 
     // 用第5/95百分位数裁剪极端值，避免渐近线拉伸整个范围
     let yMin, yMax;
-    if (yValues.length > 10) {
+    if (yValues.length === 0) {
+      yMin = -5;
+      yMax = 5;
+    } else if (yValues.length > 10) {
       const sorted = [...yValues].sort((a, b) => a - b);
       const lo = Math.floor(sorted.length * 0.05);
       const hi = Math.ceil(sorted.length * 0.95) - 1;
@@ -107,22 +111,25 @@ export class MathEngine {
   }
 
   // 检测特殊点
-  // 返回 { zeros, extrema, asymptotes, discontinuities }
+  // 返回 { zeros, extrema, asymptotes, discontinuities, inflections }
   analyze(xMin, xMax, numPoints = 1000) {
     const step = (xMax - xMin) / (numPoints - 1);
     const zeros = [];
     const extrema = [];
     const asymptotes = [];
     const discontinuities = [];
+    const inflections = [];
 
     let prevY = null, prevDefined = false;
     let prevDeriv = null, prevDerivDefined = false;
     let prevX = null;
+    let prevSecondDeriv = null, prevSecondDerivDefined = false;
 
     for (let i = 0; i < numPoints; i++) {
       const x = xMin + i * step;
       const { value: y, defined } = this.evaluate(x);
       const { value: d, defined: dDefined } = this.derivative(x);
+      const { value: dd, defined: ddDefined } = this.secondDerivative(x);
 
       if (prevX !== null) {
         // 零点检测：y 值穿越 x 轴（排除渐近线误判）
@@ -217,11 +224,22 @@ export class MathEngine {
         }
       }
 
+      // 拐点检测：二阶导数符号变化
+      if (ddDefined && prevSecondDerivDefined && prevSecondDeriv * dd < 0) {
+        const midX = (prevX + x) / 2;
+        const { defined: midDef } = this.evaluate(midX);
+        if (midDef) {
+          inflections.push({ x: midX });
+        }
+      }
+
       prevX = x;
       prevY = y;
       prevDefined = defined;
       prevDeriv = d;
       prevDerivDefined = dDefined;
+      prevSecondDeriv = dd;
+      prevSecondDerivDefined = ddDefined;
     }
 
     // 去重（相邻检测到的同一点）
@@ -229,7 +247,8 @@ export class MathEngine {
       zeros: this._dedup(zeros),
       extrema: this._dedup(extrema),
       asymptotes: this._dedup(asymptotes),
-      discontinuities: this._dedup(discontinuities)
+      discontinuities: this._dedup(discontinuities),
+      inflections: this._dedup(inflections)
     };
   }
 

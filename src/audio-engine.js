@@ -11,13 +11,23 @@ export class AudioEngine {
   init() {
     if (this._initialized) {
       this.ctx.resume();
-      return;
+      return true;
     }
-    this.ctx = new AudioContext();
-    this.masterGain = this.ctx.createGain();
-    this.masterGain.gain.value = 0.7;
-    this.masterGain.connect(this.ctx.destination);
-    this._initialized = true;
+    try {
+      this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+      this.masterGain = this.ctx.createGain();
+      this.masterGain.gain.value = 0.7;
+      this.masterGain.connect(this.ctx.destination);
+      this._initialized = true;
+      return true;
+    } catch (e) {
+      console.error('AudioEngine 初始化失败:', e);
+      return false;
+    }
+  }
+
+  get available() {
+    return this._initialized && this.ctx && this.ctx.state !== 'closed';
   }
 
   get currentTime() {
@@ -177,6 +187,45 @@ export class AudioEngine {
     return time + duration;
   }
 
+  // S09 拐点：短暂的音色闪烁（sine→triangle→sine 快速切换）
+  playInflection(time, volume = 0.25) {
+    const duration = 0.06;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc.type = 'triangle';
+    osc.frequency.value = 700;
+    gain.gain.setValueAtTime(0, time);
+    gain.gain.linearRampToValueAtTime(volume, time + 0.005);
+    gain.gain.linearRampToValueAtTime(0, time + duration);
+
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+
+    osc.start(time);
+    osc.stop(time + duration + 0.01);
+  }
+
+  // S14 可去间断点：轻微的"缺口"提示音
+  playRemovableDiscontinuity(time, volume = 0.15) {
+    const duration = 0.04;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc.type = 'sine';
+    osc.frequency.value = 1000;
+    gain.gain.setValueAtTime(0, time);
+    gain.gain.linearRampToValueAtTime(volume, time + 0.003);
+    gain.gain.setValueAtTime(volume, time + duration * 0.3);
+    gain.gain.linearRampToValueAtTime(0, time + duration);
+
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+
+    osc.start(time);
+    osc.stop(time + duration + 0.01);
+  }
+
   // 无定义点"空洞"音效（静噪声）
   playUndefined(time, volume = 0.2) {
     const duration = 0.08;
@@ -236,9 +285,7 @@ export class AudioEngine {
   }
 
   // 切换波形类型（正值/负值音色切换）
-  setWaveform(oscNode, type, time, rampTime = 0.05) {
-    // OscillatorNode.type 不能平滑切换，但切换本身不会爆音
-    // 只要增益在切换时不是很大就没问题
+  setWaveform(oscNode, type, time) {
     oscNode.type = type;
   }
 

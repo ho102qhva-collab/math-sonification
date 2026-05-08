@@ -9,13 +9,21 @@ export class Speech {
     this._audioCtx = null;
     this._currentSource = null;
     this._queue = [];
-    this._mode = 'webspeech'; // 'webspeech' | 'edgetts'
+    this._mode = 'webspeech';
     this._voice = null;
     this._targetRate = 3.0;
+    this._available = true;
 
-    this.synth = window.speechSynthesis;
+    this.synth = window.speechSynthesis || null;
+    if (!this.synth) {
+      this._mode = 'edgetts';
+      this._available = true;
+      return;
+    }
     this._initVoice();
   }
+
+  get available() { return this._available; }
 
   _initVoice() {
     const select = () => {
