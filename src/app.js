@@ -345,13 +345,14 @@ export class App {
     const durations = { fast: 2.5, normal: 5, slow: 10 };
     const duration = durations[speed] || 5;
     const engines = this.nav._multiEngines;
+    const focusIndex = this._multiFocusIndex || 0;
 
     if (!engines || engines.length === 0) return;
 
     this.scanner.playMulti({
       engines,
       xMin, xMax, duration,
-      focusIndex: this._multiFocusIndex || 0,
+      focusIndex,
       onProgress: (progress) => this._updateScanLine(progress),
       onComplete: () => {
         this.state = 'explore';

@@ -179,7 +179,7 @@ export class Speech {
 
   _cancelCurrent() {
     if (this._currentSource) { try { this._currentSource.stop(); } catch {} this._currentSource = null; }
-    this.synth.cancel();
+    if (this.synth) this.synth.cancel();
   }
 
   _drain() {

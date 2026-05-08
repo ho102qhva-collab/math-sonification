@@ -15,30 +15,6 @@ export class MathEngine {
     this._compiledList = [];
   }
 
-  // 编译单个表达式
-  compile(expr) {
-    this._compiledList = [];
-    this._compiled = null;
-    try {
-      this._expression = expr;
-      this._compiled = math.compile(expr);
-      const testPoints = [0, 1, -1, 0.5, 2];
-      let anyValid = false;
-      for (const x of testPoints) {
-        const result = this.evaluate(x);
-        if (result.defined) { anyValid = true; break; }
-      }
-      if (!anyValid) {
-        this._compiled = null;
-        return { success: false, error: `无法计算表达式 "${expr}"，请检查函数名和变量是否正确` };
-      }
-      return { success: true };
-    } catch (e) {
-      this._compiled = null;
-      return { success: false, error: e.message };
-    }
-  }
-
   // 编译多个表达式（分号分隔）
   compileMulti(exprStr) {
     const parts = exprStr.split(';').map(s => s.trim()).filter(Boolean);
@@ -89,6 +65,8 @@ export class MathEngine {
 
   // 编译表达式
   compile(expr) {
+    this._compiledList = [];
+    this._compiled = null;
     try {
       this._expression = expr;
       this._compiled = math.compile(expr);
