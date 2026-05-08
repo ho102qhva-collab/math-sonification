@@ -6,6 +6,8 @@ export class AudioEngine {
     this.ctx = null;
     this.masterGain = null;
     this._initialized = false;
+    this.freqMin = 65;   // C2
+    this.freqMax = 2093; // C7
   }
 
   init() {
@@ -35,16 +37,21 @@ export class AudioEngine {
   }
 
   // 对数频率映射：y 值 → 频率 (Hz)
-  // 范围 C2(65Hz) ~ C7(2093Hz)，5 个八度，增强音高区分度
-  // y=0 对应 C4(262Hz)
   yToFrequency(y, yMin = -5, yMax = 5) {
-    const C2 = 65;
-    const C7 = 2093;
     const normalized = (y - yMin) / (yMax - yMin);
     const clamped = Math.max(0, Math.min(1, normalized));
-    const minLog = Math.log2(C2);
-    const maxLog = Math.log2(C7);
+    const minLog = Math.log2(this.freqMin);
+    const maxLog = Math.log2(this.freqMax);
     return Math.pow(2, minLog + clamped * (maxLog - minLog));
+  }
+
+  // 设置个性化频率范围（听力校准后调用）
+  setFrequencyRange(minHz, maxHz) {
+    this.freqMin = Math.max(20, minHz);
+    this.freqMax = Math.min(8000, maxHz);
+    if (this.freqMax - this.freqMin < 100) {
+      this.freqMax = this.freqMin + 100;
+    }
   }
 
   // x 值 → 立体声声像 (-1 全左, 0 中, +1 全右)

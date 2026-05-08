@@ -11,6 +11,7 @@ import { Visualizer } from './visualizer.js';
 import { renderPresets, PRESETS } from './presets.js';
 import { TutorialSystem } from './tutorial.js';
 import { SelfTest } from './selftest.js';
+import { Calibration } from './calibration.js';
 import { exprToChinese } from './expr-speech.js';
 
 export class App {
@@ -23,6 +24,7 @@ export class App {
     this.nav = new Navigator(this.math, this.audio, this.speech, this.scanner);
     this.tutorial = new TutorialSystem(this);
     this.selftest = new SelfTest(this);
+    this.calibration = new Calibration(this.audio, this.speech);
 
     // 状态
     this.state = 'idle'; // idle | summary | scanning | explore
@@ -52,6 +54,12 @@ export class App {
     this.nav.onDerivativeToggle = (on) => this._onDerivativeToggle(on);
     this.nav.onParamChange = (expr, param, value) => this._onParamChange(expr, param, value);
     this.nav.onSnapshotToggle = () => this._toggleSnapshot();
+
+    // 恢复校准结果
+    this._restoreCalibration();
+
+    // 恢复用户偏好
+    this._restorePreferences();
 
     // 检查是否是首次使用
     if (!localStorage.getItem('mathSonification.visited')) {
@@ -105,6 +113,7 @@ export class App {
       paramsDisplay: $('params-display'),
       paramsText: $('params-text'),
       snapshotBtn: $('btn-snapshot'),
+      calibrationBtn: $('btn-calibration'),
     };
   }
 
@@ -128,6 +137,8 @@ export class App {
     this.els.selftestAnswer.addEventListener('click', () => this.selftest.submitAnswer());
     this.els.contrastBtn.addEventListener('click', () => this._toggleContrast());
     this.els.snapshotBtn.addEventListener('click', () => this._toggleSnapshot());
+    this.els.calibrationBtn.addEventListener('click', () => this.calibration.start());
+    this._bindTouchControls();
   }
 
   _renderPresets() {
@@ -415,6 +426,7 @@ export class App {
     if (info.action === 'toggleRef') {
       this.els.referenceBtn.textContent = `参考音：${info.value ? '开' : '关'}`;
       this.els.referenceBtn.setAttribute('aria-pressed', info.value);
+      this._savePreferences();
       return;
     }
     if (info.action === 'switchFocus') {
@@ -462,6 +474,7 @@ export class App {
     this.els.summaryBtn.textContent = `语音摘要：${this.summaryEnabled ? '开' : '关'}`;
     this.els.summaryBtn.setAttribute('aria-pressed', this.summaryEnabled);
     this.speech.speakAction(this.summaryEnabled ? '语音摘要已开启' : '语音摘要已关闭');
+    this._savePreferences();
   }
 
   _onSpecialPoint(sp) {
@@ -541,6 +554,7 @@ export class App {
     const isHC = document.body.classList.toggle('high-contrast');
     this.els.contrastBtn.setAttribute('aria-pressed', isHC);
     this.speech.speakAction(isHC ? '高对比度模式已开启' : '高对比度模式已关闭');
+    this._savePreferences();
   }
 
   _toggleSnapshot() {
@@ -563,6 +577,79 @@ export class App {
     this.els.snapshotBtn.textContent = '清除参照';
     this.els.snapshotBtn.setAttribute('aria-pressed', true);
     this.speech.speakAction(`已保存 ${this.math._expression} 作为参照函数`);
+  }
+
+  _restoreCalibration() {
+    try {
+      const data = localStorage.getItem('mathSonification.calibration');
+      if (data) {
+        const { minFreq, maxFreq } = JSON.parse(data);
+        if (minFreq && maxFreq) {
+          this.audio.setFrequencyRange(minFreq, maxFreq);
+        }
+      }
+    } catch {}
+  }
+
+  _restorePreferences() {
+    try {
+      const data = localStorage.getItem('mathSonification.preferences');
+      if (!data) return;
+      const prefs = JSON.parse(data);
+
+      if (prefs.speed && this.els.speed) {
+        this.els.speed.value = prefs.speed;
+      }
+      if (prefs.summaryEnabled !== undefined) {
+        this.summaryEnabled = prefs.summaryEnabled;
+        this.els.summaryBtn.textContent = `语音摘要：${this.summaryEnabled ? '开' : '关'}`;
+        this.els.summaryBtn.setAttribute('aria-pressed', this.summaryEnabled);
+      }
+      if (prefs.referenceTone !== undefined) {
+        this.nav.referenceTone = prefs.referenceTone;
+        this.els.referenceBtn.textContent = `参考音：${prefs.referenceTone ? '开' : '关'}`;
+        this.els.referenceBtn.setAttribute('aria-pressed', prefs.referenceTone);
+      }
+      if (prefs.highContrast) {
+        document.body.classList.add('high-contrast');
+        this.els.contrastBtn.setAttribute('aria-pressed', true);
+      }
+    } catch {}
+  }
+
+  _savePreferences() {
+    const prefs = {
+      speed: this.els.speed.value,
+      summaryEnabled: this.summaryEnabled,
+      referenceTone: this.nav.referenceTone,
+      highContrast: document.body.classList.contains('high-contrast'),
+    };
+    try {
+      localStorage.setItem('mathSonification.preferences', JSON.stringify(prefs));
+    } catch {}
+  }
+
+  _bindTouchControls() {
+    const panel = document.getElementById('touch-controls');
+    if (!panel) return;
+    const actions = {
+      left: () => this.nav.stepBackward(),
+      right: () => this.nav.stepForward(),
+      up: () => this.nav.increaseStep(),
+      down: () => this.nav.decreaseStep(),
+      play: () => this._onPlay(),
+      report: () => this.nav.reportCoordinate(),
+      zero: () => this.nav.jumpToZero(),
+      extrema: () => this.nav.jumpToExtrema(),
+      zoomin: () => this.nav.zoomIn(),
+      zoomout: () => this.nav.zoomOut(),
+    };
+    panel.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-action]');
+      if (!btn) return;
+      const action = actions[btn.dataset.action];
+      if (action) action();
+    });
   }
 }
 

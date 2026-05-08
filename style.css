@@ -327,6 +327,35 @@ select:focus {
   #expression-input { min-width: unset; }
   .controls-row { flex-direction: column; align-items: stretch; }
   .control-group { flex-wrap: wrap; }
+  #tutorial-section { flex-wrap: wrap; }
+  .dialog-actions { flex-wrap: wrap; }
+  button { padding: 0.7rem 0.8rem; min-height: 44px; }
+}
+
+/* 触屏操作面板 */
+#touch-controls {
+  display: none;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+}
+
+@media (pointer: coarse), (max-width: 600px) {
+  #touch-controls {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+}
+
+.touch-btn {
+  width: 56px;
+  height: 56px;
+  font-size: 1.3rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  padding: 0;
 }
 
 /* ===== 高对比度模式 ===== */

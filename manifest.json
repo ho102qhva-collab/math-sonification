@@ -1,0 +1,17 @@
+{
+  "name": "数学声觉化工具",
+  "short_name": "数学声觉化",
+  "description": "用耳朵感知数学——面向视障用户的函数声觉化工具",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#4fc3f7",
+  "lang": "zh-CN",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='80' font-size='80'>🎵</text></svg>",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

@@ -6,6 +6,12 @@ export class SoundEffects {
     this.audio = audioEngine;
   }
 
+  static _vibrate(pattern) {
+    try {
+      if (navigator.vibrate) navigator.vibrate(pattern);
+    } catch {}
+  }
+
   // S01 操作确认音
   confirm(time) {
     return this.audio.playConfirm(time);
@@ -26,6 +32,7 @@ export class SoundEffects {
   zeroClick(time, x, xMin, xMax) {
     const pan = this.audio.xToPan(x, xMin, xMax);
     this.audio.playTick(time, 1400, 0.025, 0.35, pan);
+    SoundEffects._vibrate(30);
   }
 
   // S06 y轴 thud（x过零）
@@ -36,11 +43,13 @@ export class SoundEffects {
   // S07 极大值"叮"
   maxDing(time, x, xMin, xMax) {
     this.audio.playDing(time, true, 0.4);
+    SoundEffects._vibrate([20, 30, 20]);
   }
 
   // S08 极小值"叮"
   minDing(time, x, xMin, xMax) {
     this.audio.playDing(time, false, 0.4);
+    SoundEffects._vibrate([40]);
   }
 
   // S10 正无穷渐近
@@ -88,5 +97,6 @@ export class SoundEffects {
   // S16 交叉点音效
   intersection(time) {
     this.audio.playIntersection(time, 800, 1200, 0.3);
+    SoundEffects._vibrate([15, 15, 15, 15, 15]);
   }
 }
